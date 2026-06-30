@@ -4,6 +4,8 @@ import { Header } from "./components/Header";
 import { ClinicalTranscription } from "./pages/ClinicalTranscription";
 import { AdminAutomation } from "./pages/AdminAutomation";
 import { ComplianceSecurity } from "./pages/ComplianceSecurity";
+import { Scheduling } from "./pages/Scheduling";
+import { DataExtraction } from "./pages/DataExtraction";
 import './App.css'
 
 function App() {
@@ -15,6 +17,8 @@ function App() {
         <Route path="/transcription" element={<ClinicalTranscription />} />
         <Route path="/admin" element={<AdminAutomation />} />
         <Route path="/compliance" element={<ComplianceSecurity />} />
+        <Route path="/scheduling" element={<Scheduling />} />
+        <Route path="/data-extraction" element={<DataExtraction />} />
       </Routes>
     </HashRouter>
   );
