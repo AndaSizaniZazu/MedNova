@@ -71,7 +71,7 @@ const Index = () => (
           <Link to="/transcription">
             <Button size="lg">Request a Demo</Button>
           </Link>
-          <Link to="/admin">
+          <Link to="/pricing">
             <Button size="lg" variant="outline">View Pricing</Button>
           </Link>
         </motion.div>
@@ -163,7 +163,7 @@ const Index = () => (
           <Link to="/transcription">
             <Button size="lg">Get Started</Button>
           </Link>
-          <Link to="/compliance">
+          <Link to="/pricing">
             <Button size="lg" variant="outline">See Pricing</Button>
           </Link>
         </div>

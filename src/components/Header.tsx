@@ -11,8 +11,9 @@ export const Header = () => {
     { label: "Transcription", path: "/transcription" },
     { label: "Scheduling", path: "/scheduling" },
     { label: "Data Extraction", path: "/data-extraction" },
-    { label: "Admin Automation", path: "/admin" },
+    { label: "Admin", path: "/admin" },
     { label: "Compliance", path: "/compliance" },
+    { label: "Pricing", path: "/pricing" },
   ];
 
   return (
