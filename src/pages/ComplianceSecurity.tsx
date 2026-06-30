@@ -3,16 +3,23 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Shield, Lock, Eye, Database, Zap, CheckCircle2 } from "lucide-react";
 import { useState } from "react";
+import { API_BASE } from "@/utils/api";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
   visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.1, duration: 0.5 } }),
 };
 
+interface ComplianceStatus {
+  stateless_mode: boolean;
+  encryption_enabled: boolean;
+  audit_logging: string;
+  auto_delete_minutes: number;
+}
+
 export const ComplianceSecurity = () => {
   const [anonymized, setAnonymized] = useState("");
-  const [auditLogs, setAuditLogs] = useState([]);
-  const [complianceStatus, setComplianceStatus] = useState(null);
+  const [complianceStatus, setComplianceStatus] = useState<ComplianceStatus | null>(null);
 
   const features = [
     { icon: Lock, title: "End-to-End Encryption", desc: "TLS/SSL encryption for all data" },
@@ -25,7 +32,7 @@ export const ComplianceSecurity = () => {
 
   const handleAnonymize = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/compliance/anonymize", {
+      const response = await fetch(`${API_BASE}/api/compliance/anonymize`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer token" },
         body: JSON.stringify({
@@ -42,8 +49,8 @@ export const ComplianceSecurity = () => {
 
   const handleGetStatus = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/compliance/status");
-      const data = await response.json();
+      const response = await fetch(`${API_BASE}/api/compliance/status`);
+      const data: ComplianceStatus = await response.json();
       setComplianceStatus(data);
     } catch (error) {
       console.error("Status fetch failed:", error);

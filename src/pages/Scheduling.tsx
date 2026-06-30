@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CalendarDays, Bell, AlertTriangle, CheckCircle2, Clock, User } from "lucide-react";
 import { useState } from "react";
+import { API_BASE } from "@/utils/api";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -65,7 +66,7 @@ export const Scheduling = () => {
     }
     setBookLoading(true);
     try {
-      const response = await fetch("http://localhost:8000/api/scheduling/appointments", {
+      const response = await fetch(`${API_BASE}/api/scheduling/appointments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
@@ -105,7 +106,7 @@ export const Scheduling = () => {
   const handleSendReminders = async () => {
     setLoading(true);
     try {
-      await fetch("http://localhost:8000/api/scheduling/reminders/send-bulk", { method: "POST" });
+      await fetch(`${API_BASE}/api/scheduling/reminders/send-bulk`, { method: "POST" });
     } catch {}
     setAppointments((prev) => prev.map((a) => ({ ...a, reminderSent: true })));
     setRemindersSent(true);

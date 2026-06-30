@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Database, Activity, Pill, FileText, Users, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { API_BASE } from "@/utils/api";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -53,7 +54,7 @@ export const DataExtraction = () => {
     if (!patientRecord.trim()) return;
     setExtractLoading(true);
     try {
-      const response = await fetch("http://localhost:8000/api/data-extraction/extract", {
+      const response = await fetch(`${API_BASE}/api/data-extraction/extract`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ clinical_text: patientRecord }),
@@ -84,7 +85,7 @@ export const DataExtraction = () => {
   const handleHandover = async () => {
     setHandoverLoading(true);
     try {
-      const response = await fetch("http://localhost:8000/api/data-extraction/handover", {
+      const response = await fetch(`${API_BASE}/api/data-extraction/handover`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ward: "Cardiology", shift: "Night" }),

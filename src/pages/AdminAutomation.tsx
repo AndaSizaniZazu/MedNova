@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FileText, DollarSign, Send, ClipboardList, Search, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { API_BASE } from "@/utils/api";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -56,7 +57,7 @@ export const AdminAutomation = () => {
   const handleBillingPrecheck = async () => {
     setBillingLoading(true);
     try {
-      const response = await fetch("http://localhost:8000/api/admin/billing/precheck", {
+      const response = await fetch(`${API_BASE}/api/admin/billing/precheck`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ claim_id: claimId, provider_id: providerId, patient_id: patientId, icd_codes: icdCodes.split(",").map((s) => s.trim()) }),
@@ -75,7 +76,7 @@ export const AdminAutomation = () => {
   const handleReferral = async () => {
     setReferralLoading(true);
     try {
-      const response = await fetch("http://localhost:8000/api/admin/referral/generate", {
+      const response = await fetch(`${API_BASE}/api/admin/referral/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(refForm),
@@ -96,7 +97,7 @@ export const AdminAutomation = () => {
   const handleDischarge = async () => {
     setDischargeLoading(true);
     try {
-      const response = await fetch("http://localhost:8000/api/admin/discharge/summary", {
+      const response = await fetch(`${API_BASE}/api/admin/discharge/summary`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...disForm, medications: disForm.medications.split(",").map((s) => s.trim()) }),
@@ -118,7 +119,7 @@ export const AdminAutomation = () => {
     setCodeLoading(true);
     try {
       const endpoint = codeType === "ICD10" ? "icd10" : "cpt";
-      const response = await fetch(`http://localhost:8000/api/admin/${endpoint}/search?query=${encodeURIComponent(codeSearch)}&limit=5`);
+      const response = await fetch(`${API_BASE}/api/admin/${endpoint}/search?query=${encodeURIComponent(codeSearch)}&limit=5`);
       setCodeResults(await response.json());
     } catch {
       const icd10: CodeResult[] = [

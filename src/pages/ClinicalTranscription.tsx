@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Mic, Languages, FileText, CheckCircle2, Loader2, Download } from "lucide-react";
 import { useState } from "react";
+import { API_BASE } from "@/utils/api";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -58,7 +59,7 @@ export const ClinicalTranscription = () => {
     if (!transcript.trim()) return;
     setLoading(true);
     try {
-      const response = await fetch("http://localhost:8000/api/transcription/transcribe", {
+      const response = await fetch(`${API_BASE}/api/transcription/transcribe`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
