@@ -19,11 +19,11 @@ const stats = [
 ];
 
 const features = [
-  { icon: Mic, title: "AI Clinical Transcription", desc: "Real-time speech-to-SOAP notes in multiple South African languages." },
-  { icon: FileText, title: "Administrative Automation", desc: "Auto-generate referral letters, billing codes, and medical reports." },
-  { icon: CalendarDays, title: "Smart Scheduling", desc: "AI-optimised appointment booking with no-show prediction." },
-  { icon: Database, title: "Data Extraction", desc: "Summarise patient histories and extract insights from records." },
-  { icon: Shield, title: "Compliance & Security", desc: "POPIA-compliant with end-to-end encryption and audit trails." },
+  { icon: Mic, title: "AI Clinical Transcription", desc: "Real-time speech-to-SOAP notes in multiple South African languages.", path: "/transcription" },
+  { icon: FileText, title: "Administrative Automation", desc: "Auto-generate referral letters, billing codes, and medical reports.", path: "/admin" },
+  { icon: CalendarDays, title: "Smart Scheduling", desc: "AI-optimised appointment booking with no-show prediction.", path: "/scheduling" },
+  { icon: Database, title: "Data Extraction", desc: "Summarise patient histories and extract insights from records.", path: "/data-extraction" },
+  { icon: Shield, title: "Compliance & Security", desc: "POPIA-compliant with end-to-end encryption and audit trails.", path: "/compliance" },
 ];
 
 const audiences = [
@@ -103,15 +103,17 @@ const Index = () => (
         <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {features.map((f, i) => (
             <motion.div key={f.title} initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} custom={i}>
-              <Card className="h-full transition-shadow hover:shadow-lg">
-                <CardContent className="p-6">
-                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-                    <f.icon className="h-6 w-6 text-primary" />
-                  </div>
-                  <h3 className="text-lg font-semibold">{f.title}</h3>
-                  <p className="mt-2 text-sm text-muted-foreground">{f.desc}</p>
-                </CardContent>
-              </Card>
+              <Link to={f.path} className="block h-full">
+                <Card className="h-full transition-shadow hover:shadow-lg hover:border-primary/30 cursor-pointer">
+                  <CardContent className="p-6">
+                    <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+                      <f.icon className="h-6 w-6 text-primary" />
+                    </div>
+                    <h3 className="text-lg font-semibold">{f.title}</h3>
+                    <p className="mt-2 text-sm text-muted-foreground">{f.desc}</p>
+                  </CardContent>
+                </Card>
+              </Link>
             </motion.div>
           ))}
         </div>
