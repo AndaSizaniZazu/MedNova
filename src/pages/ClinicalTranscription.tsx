@@ -5,6 +5,7 @@ import { Mic, Languages, FileText, CheckCircle2, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { DraftPanel } from "@/components/DraftPanel";
 import { useSkillDraft } from "@/utils/skills";
+import { sampleTranscript } from "@/utils/samples";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -12,7 +13,7 @@ const fadeUp = {
 };
 
 const sampleTranscripts: Record<string, string> = {
-  en: "Patient comes in complaining of a persistent headache for the past two weeks. The pain is rated 7 out of 10. It's worse in the mornings and somewhat relieved with paracetamol. No vomiting or visual disturbances. Blood pressure is 130 over 85, temperature 37.2 degrees, heart rate 78.",
+  en: sampleTranscript,
   af: "Pasiënt kla oor aanhoudende hoofpyn vir die afgelope twee weke. Pyn is 7 uit 10. Bloedruk is 130 oor 85, temperatuur 37.2 grade.",
   xh: "Umguli unezikhalazo zomkhuhlane wekhanda iiveki ezimbini. Iintlungu ziphakamele kwisithuba se-7 kwi-10. Umfutho wegazi u-130/85.",
   zu: "Umguli ubika ikhanda elimuntu elishayo izinsuku eziyishumi nane. Ubuhlungu ubuzeka ngo-7 kwi-10. Ingcindezi yegazi i-130/85.",

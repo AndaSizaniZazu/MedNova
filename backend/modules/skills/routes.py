@@ -112,7 +112,14 @@ def _to_response(draft: Draft) -> DraftResponse:
     )
 
 
-async def _run(feature: str, skill: str, content: str, req: Requester, schema: Optional[Dict[str, Any]] = None) -> DraftResponse:
+async def _run(
+    feature: str,
+    skill: str,
+    content: str,
+    req: Requester,
+    schema: Optional[Dict[str, Any]] = None,
+    variant: Optional[str] = None,
+) -> DraftResponse:
     try:
         draft = await skill_runner.run(
             feature=feature,
@@ -122,10 +129,18 @@ async def _run(feature: str, skill: str, content: str, req: Requester, schema: O
             role=req.role,
             patient_ref=req.patient_ref,
             json_schema=schema,
+            variant=variant,
         )
     except SkillRunnerError as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)
     return _to_response(draft)
+
+
+@router.get("/status")
+async def status():
+    """Which LLM provider and model the skill endpoints are using"""
+    provider = skill_runner.provider
+    return {"provider": provider.name, "model": provider.model, "demo": provider.name == "demo"}
 
 
 @router.get("/skills")
@@ -166,7 +181,7 @@ async def letter(req: LetterRequest):
         + _section("Language", req.language)
         + f"\n<source_notes>\n{req.source_notes}\n</source_notes>"
     )
-    return await _run("letters", "mednova-referral-letters", content, req)
+    return await _run("letters", "mednova-referral-letters", content, req, variant=req.document_type)
 
 
 @router.post("/coding/suggest", response_model=DraftResponse)
@@ -246,7 +261,7 @@ async def summaries(
         + f"\n<records>\n{req.records}\n</records>"
     )
     schema = EXTRACTION_SCHEMA if mode == "extraction" else None
-    return await _run("summaries", "mednova-clinical-summaries", content, req, schema)
+    return await _run("summaries", "mednova-clinical-summaries", content, req, schema, variant=mode)
 
 
 SCHEDULE_TASKS = {
@@ -265,7 +280,7 @@ async def schedule_propose(req: ScheduleRequest):
         + _section("Language", req.language)
         + f"\n<details>\n{req.details}\n</details>"
     )
-    return await _run("schedule.propose", "mednova-scheduling", content, req)
+    return await _run("schedule.propose", "mednova-scheduling", content, req, variant=req.task)
 
 
 @router.post("/drafts/{draft_id}/review")

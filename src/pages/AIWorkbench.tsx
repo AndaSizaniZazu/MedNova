@@ -3,7 +3,20 @@ import { Button } from "@/components/ui/button";
 import { Sparkles, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { DraftPanel } from "@/components/DraftPanel";
+import { Markdown } from "@/components/Markdown";
 import { roles, useSkillDraft } from "@/utils/skills";
+import {
+  describeAppointments,
+  referralNotes,
+  sampleAllocation,
+  sampleAppointments,
+  sampleClaimForm,
+  sampleCodingNote,
+  sampleRecord,
+  sampleReferral,
+  sampleTranscript,
+  toClaim,
+} from "@/utils/samples";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -27,13 +40,7 @@ const features: Feature[] = [
     label: "SOAP Note",
     skill: "mednova-soap-notes",
     inputLabel: "Consultation transcript",
-    sample: `DR: Good morning, what brings you in today?
-PT: I've had a headache for about two weeks, mostly in the afternoons. Isisu siyaqaqanjelwa too sometimes.
-DR: How bad is the headache out of ten?
-PT: About seven.
-DR: Any allergies?
-PT: Penicillin gives me a rash.
-DR: Your BP is 138 over 86. I think this is a tension-type headache. Take paracetamol 1 g up to four times a day for five days and come back in a week if it's not better.`,
+    sample: sampleTranscript,
     path: () => "/api/ai/notes/soap",
     body: (input) => ({ transcript: input, practice_type: "GP" }),
   },
@@ -42,9 +49,7 @@ DR: Your BP is 138 over 86. I think this is a tension-type headache. Take parace
     label: "Referral Letter",
     skill: "mednova-referral-letters",
     inputLabel: "Source clinical notes",
-    sample: `54F, known hypertensive. Two episodes of chest tightness on exertion this month, resolves with rest.
-ECG: non-specific ST changes. Meds: Amlodipine 10 mg od, Aspirin 75 mg od. Allergy: Sulfonamides.
-Refer to cardiology for stress ECG / further workup.`,
+    sample: referralNotes(sampleReferral),
     path: () => "/api/ai/letters",
     options: [
       { value: "referral", label: "Referral" },
@@ -52,15 +57,14 @@ Refer to cardiology for stress ECG / further workup.`,
       { value: "sick_note", label: "Sick note" },
       { value: "admin_email", label: "Admin email" },
     ],
-    body: (input, option) => ({ source_notes: input, document_type: option || "referral", recipient: "Cardiology Department" }),
+    body: (input, option) => ({ source_notes: input, document_type: option || "referral", recipient: sampleReferral.referral_to }),
   },
   {
     id: "coding",
     label: "Clinical Coding",
     skill: "mednova-clinical-coding",
     inputLabel: "Clinical note",
-    sample: `A: Laceration to left forearm, 4 cm, after falling off a ladder at home.
-P: Wound cleaned and sutured (5 sutures). Tetanus toxoid given. Review in 7 days for suture removal.`,
+    sample: sampleCodingNote,
     path: () => "/api/ai/coding/suggest",
     body: (input) => ({ note: input }),
   },
@@ -69,22 +73,7 @@ P: Wound cleaned and sutured (5 sutures). Tetanus toxoid given. Review in 7 days
     label: "Claim Pre-check",
     skill: "mednova-billing-precheck",
     inputLabel: "Claim (JSON)",
-    sample: JSON.stringify(
-      {
-        claim_reference: "CLM-1042",
-        member_number: "12345678",
-        dependant_code: "01",
-        practice_number: "0123456",
-        date_of_service: "2026-10-28",
-        lines: [
-          { line: 1, tariff: "0190", icd10: ["S51.8"], quantity: 1, amount: 520.0 },
-          { line: 2, tariff: "0190", icd10: ["S51.8"], quantity: 1, amount: 520.0 },
-          { line: 3, tariff: "3305", icd10: [], quantity: 1, amount: 410.0 },
-        ],
-      },
-      null,
-      2,
-    ),
+    sample: JSON.stringify(toClaim(sampleClaimForm), null, 2),
     path: () => "/api/ai/claims/precheck",
     body: (input) => ({ claim: JSON.parse(input) }),
   },
@@ -93,11 +82,7 @@ P: Wound cleaned and sutured (5 sutures). Tetanus toxoid given. Review in 7 days
     label: "Summaries",
     skill: "mednova-clinical-summaries",
     inputLabel: "Patient records",
-    sample: `Admitted 2026-10-24 for hypertensive crisis. BP on admission 190/120 mmHg, HR 98.
-Current BP 142/88 mmHg, HR 72, SpO2 98%.
-Meds: Amlodipine 10 mg OD, Enalapril 20 mg BD, Aspirin 75 mg OD.
-Allergies: Penicillin (rash), Sulfonamides.
-Echo: mild LVH. Renal function stable. Discharge planned 2026-10-30.`,
+    sample: sampleRecord,
     path: (option) => `/api/ai/summaries/${option || "history"}`,
     options: [
       { value: "history", label: "History summary" },
@@ -112,9 +97,7 @@ Echo: mild LVH. Renal function stable. Discharge planned 2026-10-30.`,
     label: "Scheduling",
     skill: "mednova-scheduling",
     inputLabel: "Slots, requests or appointment list",
-    sample: `Practice: Sunrise Family Clinic. Dr Naidoo, Mon 3 Nov 08:00-12:00, 15-min slots.
-Requests: new patient (urgent, chest pain on exertion), 3x follow-ups (routine), 1x procedure (wound review, 30 min).
-Patient language preferences: isiZulu, English, Afrikaans.`,
+    sample: `${sampleAllocation}\n\nUpcoming appointments:\n${describeAppointments(sampleAppointments)}`,
     path: () => "/api/ai/schedule/propose",
     options: [
       { value: "allocation", label: "Smart allocation" },
@@ -235,11 +218,13 @@ export const AIWorkbench = () => {
             <DraftPanel
               state={skill}
               placeholder="Choose a skill, adjust the sample input and generate a draft."
-              renderBody={(d) => (
-                <pre className="whitespace-pre-wrap text-sm font-sans">
-                  {d.structured ? JSON.stringify(d.structured, null, 2) : d.content}
-                </pre>
-              )}
+              renderBody={(d) =>
+                d.structured ? (
+                  <pre className="whitespace-pre-wrap text-xs text-left">{JSON.stringify(d.structured, null, 2)}</pre>
+                ) : (
+                  <Markdown text={d.content} />
+                )
+              }
             />
           </div>
         </motion.div>

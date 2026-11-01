@@ -1,7 +1,8 @@
 """
 Skill Runner
-Calls Claude with a MedNova skill as the system prompt and tracks the
-resulting draft until a clinician or admin reviews it
+Sends a MedNova skill (as the system prompt) plus the user's input to the
+configured LLM provider, and tracks the resulting draft until a clinician
+or admin reviews it
 """
 
 import hashlib
@@ -13,27 +14,15 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
-import anthropic
-
 from modules.compliance.audit_logger import AuditLogger
 from modules.skills.loader import COMPLIANCE_SKILL, get_skill
+from modules.skills.providers import SkillRunnerError, create_provider
 
 logger = logging.getLogger(__name__)
 
-MODEL = os.getenv("MEDNOVA_MODEL", "claude-opus-5-5")
-EFFORT = os.getenv("MEDNOVA_EFFORT", "high")
-MAX_TOKENS = 16000
-FALLBACK_BETA = "server-side-fallback-2026-07-01"
 DRAFT_TTL_MINUTES = int(os.getenv("AUTO_DELETE_MINUTES", "60"))
 
-
-class SkillRunnerError(Exception):
-    """Raised when a skill call fails; carries the HTTP status to return"""
-
-    def __init__(self, status_code: int, message: str):
-        super().__init__(message)
-        self.status_code = status_code
-        self.message = message
+__all__ = ["Draft", "SkillRunner", "SkillRunnerError", "pseudonymise", "skill_runner"]
 
 
 @dataclass
@@ -61,22 +50,12 @@ def pseudonymise(patient_ref: Optional[str]) -> str:
 
 
 class SkillRunner:
-    """Runs MedNova skills against Claude"""
+    """Runs MedNova skills against the configured LLM provider"""
 
     def __init__(self):
-        self._client: Optional[anthropic.AsyncAnthropic] = None
+        self.provider = create_provider()
         self.audit_logger = AuditLogger()
         self.drafts: Dict[str, Draft] = {}
-
-    @property
-    def client(self) -> anthropic.AsyncAnthropic:
-        # Created lazily so the API boots without credentials configured
-        if self._client is None:
-            client = anthropic.AsyncAnthropic()
-            if client.api_key is None and client.auth_token is None and client.credentials is None:
-                raise SkillRunnerError(503, "AI service is not configured - set ANTHROPIC_API_KEY")
-            self._client = client
-        return self._client
 
     def _system_prompt(self, skill_name: str) -> list:
         compliance = get_skill(COMPLIANCE_SKILL)
@@ -94,8 +73,6 @@ class SkillRunner:
             {
                 "type": "text",
                 "text": f"# Active skill: {skill.name}\n\n{skill.body}",
-                # Skill text is stable per feature, so cache the whole system prefix
-                "cache_control": {"type": "ephemeral"},
             },
         ]
 
@@ -115,44 +92,25 @@ class SkillRunner:
         role: str,
         patient_ref: Optional[str] = None,
         json_schema: Optional[Dict[str, Any]] = None,
+        variant: Optional[str] = None,
     ) -> Draft:
         """Run a skill and return a stored draft"""
         self._purge_expired()
         record_reference = pseudonymise(patient_ref)
 
-        output_config: Dict[str, Any] = {"effort": EFFORT}
-        if json_schema is not None:
-            output_config["format"] = {"type": "json_schema", "schema": json_schema}
-
         try:
-            response = await self.client.beta.messages.create(
-                model=MODEL,
-                max_tokens=MAX_TOKENS,
-                betas=[FALLBACK_BETA],
-                fallbacks="default",
+            completion = await self.provider.complete(
                 system=self._system_prompt(skill_name),
-                output_config=output_config,
-                messages=[{"role": "user", "content": user_content}],
+                user_content=user_content,
+                json_schema=json_schema,
+                context={"feature": feature, "variant": variant},
             )
-        except anthropic.AuthenticationError as e:
-            await self._audit(user_id, role, feature, record_reference, "failed", "auth_error")
-            raise SkillRunnerError(503, "AI service is not configured - set ANTHROPIC_API_KEY") from e
-        except anthropic.RateLimitError as e:
-            await self._audit(user_id, role, feature, record_reference, "failed", "rate_limited")
-            raise SkillRunnerError(429, "AI service is busy - please retry shortly") from e
-        except anthropic.APIStatusError as e:
-            await self._audit(user_id, role, feature, record_reference, "failed", f"api_{e.status_code}")
-            raise SkillRunnerError(502, "AI service returned an error") from e
-        except anthropic.APIConnectionError as e:
-            await self._audit(user_id, role, feature, record_reference, "failed", "connection_error")
-            raise SkillRunnerError(503, "AI service is unreachable") from e
+        except SkillRunnerError as e:
+            await self._audit(user_id, role, feature, record_reference, "failed", e.audit_outcome)
+            raise
 
-        if response.stop_reason == "refusal":
-            await self._audit(user_id, role, feature, record_reference, "failed", "refusal", response.model)
-            raise SkillRunnerError(422, "The AI declined this request - please complete it manually")
-
-        text = "".join(block.text for block in response.content if block.type == "text").strip()
-        if response.stop_reason == "max_tokens":
+        text = completion.text
+        if completion.truncated:
             text += "\n\n_[Output truncated - review carefully or split the input.]_"
 
         structured: Optional[Dict[str, Any]] = None
@@ -160,7 +118,7 @@ class SkillRunner:
             try:
                 structured = json.loads(text)
             except json.JSONDecodeError:
-                logger.warning(f"{feature}: structured output could not be parsed")
+                logger.warning(f"{feature}: structured output could not be parsed - returning text")
 
         now = datetime.now()
         draft = Draft(
@@ -170,13 +128,13 @@ class SkillRunner:
             record_reference=record_reference,
             content=text,
             structured=structured,
-            model=response.model,
+            model=completion.model,
             created_at=now,
             expires_at=now + timedelta(minutes=DRAFT_TTL_MINUTES),
         )
         self.drafts[draft.id] = draft
 
-        await self._audit(user_id, role, feature, record_reference, "success", "Draft", response.model)
+        await self._audit(user_id, role, feature, record_reference, "success", "Draft", completion.model)
         return draft
 
     async def review(
@@ -208,7 +166,7 @@ class SkillRunner:
         record_reference: str,
         status: str,
         outcome: str,
-        model_version: str = MODEL,
+        model_version: Optional[str] = None,
     ) -> None:
         # Metadata only - POPIA: audit logs never contain clinical content
         await self.audit_logger.log_data_access(
@@ -217,7 +175,12 @@ class SkillRunner:
             action=f"ai.{feature}",
             patient_id=record_reference,
             status=status,
-            details={"role": role, "model_version": model_version, "outcome": outcome},
+            details={
+                "role": role,
+                "provider": self.provider.name,
+                "model_version": model_version or self.provider.model,
+                "outcome": outcome,
+            },
         )
 
 

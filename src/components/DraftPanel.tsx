@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, XCircle, PencilLine, ShieldCheck, Download } from "lucide-react";
 import type { ReactNode } from "react";
+import { Markdown } from "@/components/Markdown";
 import { roles, type Draft, type ReviewOutcome, type SkillDraftState } from "@/utils/skills";
 
 type DraftPanelProps = {
@@ -44,7 +45,12 @@ export const DraftPanel = ({ state, placeholder, renderBody, onReviewed, downloa
   }
 
   return (
-    <div className="rounded bg-background p-4 border border-primary/10 space-y-4">
+    <div className="rounded bg-background p-4 border border-primary/10 space-y-4 text-left">
+      {draft.model.startsWith("demo-mode") && (
+        <div className="rounded border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+          Demo mode — a scripted sample for the sample input, not live AI output.
+        </div>
+      )}
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-semibold px-2 py-0.5 rounded bg-yellow-50 text-yellow-700">{draft.status}</span>
         <div className="flex items-center gap-2">
@@ -56,7 +62,7 @@ export const DraftPanel = ({ state, placeholder, renderBody, onReviewed, downloa
       </div>
 
       <div className="max-h-[480px] overflow-y-auto">
-        {renderBody ? renderBody(draft) : <pre className="whitespace-pre-wrap text-sm font-sans">{draft.content}</pre>}
+        {renderBody ? renderBody(draft) : <Markdown text={draft.content} />}
       </div>
 
       <p className="text-xs text-muted-foreground italic border-t pt-2">{draft.disclaimer}</p>

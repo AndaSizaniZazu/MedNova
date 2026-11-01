@@ -6,51 +6,15 @@ import { useState } from "react";
 import { API_BASE } from "@/utils/api";
 import { DraftPanel } from "@/components/DraftPanel";
 import { useSkillDraft, type ReviewOutcome } from "@/utils/skills";
+import { describeAppointments, sampleAllocation, sampleAppointments, type Appointment } from "@/utils/samples";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
   visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.1, duration: 0.5 } }),
 };
 
-type Appointment = {
-  id: string;
-  patient: string;
-  doctor: string;
-  date: string;
-  time: string;
-  type: string;
-  previousNoShows: number;
-  bookedDaysAhead: number;
-  reminderConfirmed: boolean;
-  reminderApproved: boolean;
-};
-
-const mockAppointments: Appointment[] = [
-  { id: "APT-001", patient: "Thabo Nkosi", doctor: "Dr. Patel", date: "2026-11-10", time: "09:00", type: "General Consultation", previousNoShows: 0, bookedDaysAhead: 3, reminderConfirmed: true, reminderApproved: false },
-  { id: "APT-002", patient: "Sarah van der Merwe", doctor: "Dr. Dlamini", date: "2026-11-10", time: "09:30", type: "Follow-up", previousNoShows: 3, bookedDaysAhead: 42, reminderConfirmed: false, reminderApproved: false },
-  { id: "APT-003", patient: "Ayanda Mbeki", doctor: "Dr. Patel", date: "2026-11-10", time: "10:00", type: "New Patient", previousNoShows: 1, bookedDaysAhead: 14, reminderConfirmed: true, reminderApproved: false },
-  { id: "APT-004", patient: "Lerato Molefe", doctor: "Dr. Singh", date: "2026-11-11", time: "11:00", type: "Specialist", previousNoShows: 0, bookedDaysAhead: 21, reminderConfirmed: false, reminderApproved: false },
-];
-
-const sampleAllocation = `Practice: Sunrise Family Clinic.
-Dr Patel, Mon 10 Nov 08:00-12:00, 15-min slots. Dr Singh, Mon 10 Nov 13:00-16:00 (procedures room available).
-Requests:
-- New patient, urgent (chest pain on exertion), prefers morning
-- 3x follow-ups (routine), waiting 2-3 weeks
-- Wound review procedure, 30 min, needs procedure room
-Keep same-day urgent buffer per policy.`;
-
-// Only scheduling features go to the AI - never patient names (POPIA data minimisation)
-const describeAppointments = (appointments: Appointment[]) =>
-  appointments
-    .map(
-      (a) =>
-        `${a.id}: ${a.type} with ${a.doctor} on ${a.date} at ${a.time}; previous no-shows (12 months): ${a.previousNoShows}; booked ${a.bookedDaysAhead} days ahead; reminder confirmed: ${a.reminderConfirmed ? "yes" : "no"}`,
-    )
-    .join("\n");
-
 export const Scheduling = () => {
-  const [appointments, setAppointments] = useState<Appointment[]>(mockAppointments);
+  const [appointments, setAppointments] = useState<Appointment[]>(sampleAppointments);
   const [bookingResult, setBookingResult] = useState<string | null>(null);
   const [bookLoading, setBookLoading] = useState(false);
   const [channel, setChannel] = useState<"SMS" | "WhatsApp" | "email">("SMS");

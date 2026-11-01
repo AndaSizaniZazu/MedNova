@@ -5,6 +5,7 @@ import { FileText, DollarSign, Send, ClipboardList, Search, Loader2 } from "luci
 import { useState } from "react";
 import { DraftPanel } from "@/components/DraftPanel";
 import { useSkillDraft } from "@/utils/skills";
+import { dischargeRecords, referralNotes, sampleClaimForm, sampleCodingNote, sampleDischarge, sampleReferral, toClaim } from "@/utils/samples";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -13,44 +14,20 @@ const fadeUp = {
 
 const inputClass = "w-full mt-1 px-3 py-2 rounded border border-gray-200 bg-background text-sm";
 
-const splitCodes = (value: string) => value.split(",").map((c) => c.trim()).filter(Boolean);
-
 const spinner = (label: string) => <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> {label}</>;
 
 export const AdminAutomation = () => {
   const billing = useSkillDraft("billing");
-  const [claim, setClaim] = useState({
-    claim_reference: "CLM-001",
-    practice_number: "0123456",
-    member_number: "12345678",
-    dependant_code: "01",
-    date_of_service: "2026-10-28",
-    icd10: "M79.3",
-    tariff_codes: "0190",
-  });
+  const [claim, setClaim] = useState(sampleClaimForm);
 
   const referral = useSkillDraft("doctor");
-  const [refForm, setRefForm] = useState({
-    patient_ref: "PAT-456",
-    referral_to: "Cardiologist",
-    reason: "Hypertension management",
-    clinical_summary: "Patient presents with BP 160/100 on two readings. Family history of cardiac disease. Requires specialist assessment.",
-  });
+  const [refForm, setRefForm] = useState(sampleReferral);
 
   const discharge = useSkillDraft("doctor");
-  const [disForm, setDisForm] = useState({
-    patient_ref: "PAT-001",
-    admission_date: "2026-10-24",
-    discharge_date: "2026-10-29",
-    clinical_course: "Admitted for hypertensive crisis. BP stabilised on Amlodipine 10mg and Enalapril 20mg. Renal function normal.",
-    admission_medications: "Aspirin 75mg OD",
-    medications: "Amlodipine 10mg OD, Enalapril 20mg BD, Aspirin 75mg OD",
-  });
+  const [disForm, setDisForm] = useState(sampleDischarge);
 
   const coding = useSkillDraft("doctor");
-  const [codingNote, setCodingNote] = useState(
-    "A: Laceration to left forearm, 4 cm, after falling off a ladder at home.\nP: Wound cleaned and sutured (5 sutures). Tetanus toxoid given. Review in 7 days.",
-  );
+  const [codingNote, setCodingNote] = useState(sampleCodingNote);
 
   const services = [
     { icon: DollarSign, title: "Billing Pre-check", desc: "Identify claim rejections before submission" },
@@ -60,17 +37,7 @@ export const AdminAutomation = () => {
   ];
 
   const handleBillingPrecheck = () => {
-    const icd10 = splitCodes(claim.icd10);
-    billing.run("/api/ai/claims/precheck", {
-      claim: {
-        claim_reference: claim.claim_reference,
-        practice_number: claim.practice_number,
-        member_number: claim.member_number,
-        dependant_code: claim.dependant_code,
-        date_of_service: claim.date_of_service,
-        lines: splitCodes(claim.tariff_codes).map((tariff, i) => ({ line: i + 1, tariff, icd10, quantity: 1 })),
-      },
-    });
+    billing.run("/api/ai/claims/precheck", { claim: toClaim(claim) });
   };
 
   const handleReferral = () => {
@@ -78,20 +45,14 @@ export const AdminAutomation = () => {
       document_type: "referral",
       recipient: refForm.referral_to,
       patient_ref: refForm.patient_ref || undefined,
-      source_notes: `Reason for referral: ${refForm.reason}\n\n${refForm.clinical_summary}`,
+      source_notes: referralNotes(refForm),
     });
   };
 
   const handleDischarge = () => {
     discharge.run("/api/ai/summaries/discharge", {
       patient_ref: disForm.patient_ref || undefined,
-      records: [
-        `Admission date: ${disForm.admission_date}`,
-        `Discharge date: ${disForm.discharge_date}`,
-        `Clinical course: ${disForm.clinical_course}`,
-        `Medications on admission: ${disForm.admission_medications}`,
-        `Discharge medications: ${disForm.medications}`,
-      ].join("\n"),
+      records: dischargeRecords(disForm),
     });
   };
 
@@ -222,6 +183,10 @@ export const AdminAutomation = () => {
               <div>
                 <label className="text-sm font-semibold">Clinical Course</label>
                 <textarea value={disForm.clinical_course} onChange={(e) => setDisForm((f) => ({ ...f, clinical_course: e.target.value }))} rows={3} className={inputClass} />
+              </div>
+              <div>
+                <label className="text-sm font-semibold">Allergies</label>
+                <input type="text" value={disForm.allergies} onChange={(e) => setDisForm((f) => ({ ...f, allergies: e.target.value }))} className={inputClass} />
               </div>
               <div>
                 <label className="text-sm font-semibold">Admission Medications</label>

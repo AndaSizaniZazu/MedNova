@@ -4,7 +4,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Database, Activity, Pill, Users, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { DraftPanel } from "@/components/DraftPanel";
+import { Markdown } from "@/components/Markdown";
 import { useSkillDraft, type Draft } from "@/utils/skills";
+import { sampleRecord } from "@/utils/samples";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -20,17 +22,6 @@ type Extraction = {
   results: { test: string; value: string | null; unit: string | null; date: string | null; source: string }[];
   uncertain: { field: string; reason: string }[];
 };
-
-const sampleRecord = `Patient ref: PAT-001, 54F
-Admitted: 2026-10-24 for hypertensive crisis
-BP on admission: 190/120 mmHg, HR: 98 bpm, Temp: 37.1°C, SpO2: 96%
-Current BP: 142/88 mmHg, HR: 72 bpm, SpO2: 98%
-Medications: Amlodipine 10mg OD, Enalapril 20mg BD, Aspirin 75mg OD
-Allergies: Penicillin (rash), Sulfonamides
-Procedures: ECG (normal sinus rhythm), Echocardiogram (mild LVH), Renal function panel
-Clinical notes: Patient responding well to antihypertensives. Renal function stable.
-Pending: repeat U&E in the morning.
-Discharge planned for 2026-10-30.`;
 
 const show = (...parts: (string | null)[]) => parts.filter(Boolean).join(" ");
 
@@ -107,7 +98,7 @@ const renderExtraction = (draft: Draft) =>
   draft.structured ? (
     <ExtractionView data={draft.structured as Extraction} />
   ) : (
-    <pre className="whitespace-pre-wrap text-sm font-sans">{draft.content}</pre>
+    <Markdown text={draft.content} />
   );
 
 export const DataExtraction = () => {
