@@ -7,6 +7,7 @@ export const Header = () => {
 
   const navItems = [
     { label: "Home", path: "/" },
+    { label: "AI Workbench", path: "/ai" },
     { label: "Transcription", path: "/transcription" },
     { label: "Scheduling", path: "/scheduling" },
     { label: "Data Extraction", path: "/data-extraction" },

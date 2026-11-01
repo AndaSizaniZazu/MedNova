@@ -1,22 +1,14 @@
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Mic, Languages, FileText, CheckCircle2, Loader2, Download } from "lucide-react";
+import { Mic, Languages, FileText, CheckCircle2, Loader2 } from "lucide-react";
 import { useState } from "react";
-import { API_BASE } from "@/utils/api";
+import { DraftPanel } from "@/components/DraftPanel";
+import { useSkillDraft } from "@/utils/skills";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
   visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.1, duration: 0.5 } }),
-};
-
-type SOAPNote = {
-  subjective: string;
-  objective: string;
-  assessment: string;
-  plan: string;
-  language: string;
-  generated_at: string;
 };
 
 const sampleTranscripts: Record<string, string> = {
@@ -30,10 +22,8 @@ export const ClinicalTranscription = () => {
   const [transcript, setTranscript] = useState(sampleTranscripts.en);
   const [language, setLanguage] = useState("en");
   const [consultationType, setConsultationType] = useState("general");
-  const [soapNote, setSoapNote] = useState<SOAPNote | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [autoDelete, setAutoDelete] = useState(true);
-  const [confidenceScore, setConfidenceScore] = useState<number | null>(null);
+  const [patientRef, setPatientRef] = useState("");
+  const soap = useSkillDraft("doctor");
 
   const features = [
     { icon: Mic, title: "Real-time Audio Processing", desc: "Live transcription during consultations" },
@@ -52,50 +42,18 @@ export const ClinicalTranscription = () => {
   const handleLanguageChange = (code: string) => {
     setLanguage(code);
     setTranscript(sampleTranscripts[code] || sampleTranscripts.en);
-    setSoapNote(null);
+    soap.reset();
   };
 
-  const handleTranscribe = async () => {
+  const handleTranscribe = () => {
     if (!transcript.trim()) return;
-    setLoading(true);
-    try {
-      const response = await fetch(`${API_BASE}/api/transcription/transcribe`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          audio_base64: btoa(unescape(encodeURIComponent(transcript))),
-          language,
-          consultation_type: consultationType,
-          auto_delete_after_processing: autoDelete,
-        }),
-      });
-      const data = await response.json();
-      setSoapNote(data.soap_note);
-      setConfidenceScore(data.confidence_score ?? null);
-    } catch {
-      setSoapNote({
-        subjective: "Patient reports persistent headaches for 2 weeks, pain severity 7/10, worse in mornings, partially relieved by paracetamol. No vomiting or visual disturbances.",
-        objective: "Blood pressure: 130/85 mmHg, Temperature: 37.2°C, Heart rate: 78 bpm. No visible neurological deficit. Cranial nerves intact.",
-        assessment: "Tension-type headache. Possible hypertension-associated headache given slightly elevated BP. Migraine cannot be excluded.",
-        plan: "Prescribe paracetamol 500mg PRN. Lifestyle advice: hydration, stress reduction, regular sleep. Monitor BP — repeat in 1 week. If no improvement in 2 weeks, refer for neurology review.",
-        language,
-        generated_at: new Date().toISOString(),
-      });
-      setConfidenceScore(0.95);
-    }
-    setLoading(false);
-  };
-
-  const handleDownload = () => {
-    if (!soapNote) return;
-    const content = `SOAP NOTE — MedNova AI\nGenerated: ${soapNote.generated_at}\nLanguage: ${soapNote.language}\n\nS (Subjective):\n${soapNote.subjective}\n\nO (Objective):\n${soapNote.objective}\n\nA (Assessment):\n${soapNote.assessment}\n\nP (Plan):\n${soapNote.plan}`;
-    const blob = new Blob([content], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `soap-note-${Date.now()}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const languageName = languages.find((l) => l.code === language)?.name ?? "English";
+    soap.run("/api/ai/notes/soap", {
+      transcript,
+      practice_type: `${consultationType} consultation (transcript language: ${languageName})`,
+      output_language: "English",
+      patient_ref: patientRef || undefined,
+    });
   };
 
   return (
@@ -164,16 +122,19 @@ export const ClinicalTranscription = () => {
                     <option value="specialist">Specialist</option>
                   </select>
                 </div>
-                <div className="flex items-center gap-2">
+                <div>
+                  <label className="text-sm font-semibold block mb-2">Patient Reference</label>
                   <input
-                    id="autoDelete"
-                    type="checkbox"
-                    checked={autoDelete}
-                    onChange={(e) => setAutoDelete(e.target.checked)}
-                    className="rounded"
+                    type="text"
+                    value={patientRef}
+                    onChange={(e) => setPatientRef(e.target.value)}
+                    placeholder="e.g. P-00123 (no names)"
+                    className="px-3 py-2 rounded border border-gray-200 bg-background text-sm"
                   />
-                  <label htmlFor="autoDelete" className="text-sm">Auto-delete transcript (POPIA)</label>
                 </div>
+                <p className="text-xs text-muted-foreground max-w-xs">
+                  POPIA: transcripts are not stored. The draft is deleted once it is signed off, rejected or expires.
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -183,11 +144,6 @@ export const ClinicalTranscription = () => {
         <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={6} className="rounded-lg border border-primary/10 bg-primary/5 p-8 mb-8">
           <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
             <h2 className="text-2xl font-bold">Transcription Demo</h2>
-            {confidenceScore !== null && (
-              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-semibold">
-                Confidence: {Math.round(confidenceScore * 100)}%
-              </span>
-            )}
           </div>
           <div className="grid md:grid-cols-2 gap-8">
             <div>
@@ -199,43 +155,14 @@ export const ClinicalTranscription = () => {
                 placeholder="Paste or type consultation transcript here..."
                 className="w-full rounded bg-background p-4 border border-primary/10 text-sm resize-none"
               />
-              <Button onClick={handleTranscribe} disabled={loading} className="mt-4 w-full">
-                {loading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating SOAP Note...</> : "Generate SOAP Note"}
+              <Button onClick={handleTranscribe} disabled={soap.loading} className="mt-4 w-full">
+                {soap.loading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating SOAP Note...</> : "Generate SOAP Note"}
               </Button>
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold">SOAP Note</h3>
-                {soapNote && (
-                  <Button variant="outline" size="sm" onClick={handleDownload}>
-                    <Download className="h-3 w-3 mr-1" /> Download
-                  </Button>
-                )}
-              </div>
-              {soapNote ? (
-                <div className="rounded bg-background p-4 space-y-4 border border-primary/10">
-                  {[
-                    { label: "S (Subjective)", value: soapNote.subjective },
-                    { label: "O (Objective)", value: soapNote.objective },
-                    { label: "A (Assessment)", value: soapNote.assessment },
-                    { label: "P (Plan)", value: soapNote.plan },
-                  ].map((section) => (
-                    <div key={section.label}>
-                      <p className="text-xs font-semibold text-primary">{section.label}</p>
-                      <p className="text-sm mt-1">{section.value}</p>
-                    </div>
-                  ))}
-                  <p className="text-xs text-muted-foreground border-t pt-2">
-                    Generated: {soapNote.generated_at ? new Date(soapNote.generated_at).toLocaleString() : "just now"} · Language: {soapNote.language}
-                    {autoDelete && " · Transcript scheduled for auto-deletion"}
-                  </p>
-                </div>
-              ) : (
-                <div className="rounded bg-background p-4 min-h-64 border border-primary/10 flex items-center justify-center">
-                  <p className="text-sm text-muted-foreground">SOAP note will appear here...</p>
-                </div>
-              )}
+              <h3 className="font-semibold mb-4">SOAP Note</h3>
+              <DraftPanel state={soap} placeholder="SOAP note will appear here..." downloadName="soap-note" />
             </div>
           </div>
         </motion.div>

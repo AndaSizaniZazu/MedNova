@@ -1,112 +1,141 @@
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Database, Activity, Pill, FileText, Users, Loader2 } from "lucide-react";
+import { Database, Activity, Pill, Users, Loader2 } from "lucide-react";
 import { useState } from "react";
-import { API_BASE } from "@/utils/api";
+import { DraftPanel } from "@/components/DraftPanel";
+import { useSkillDraft, type Draft } from "@/utils/skills";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
   visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.1, duration: 0.5 } }),
 };
 
-type ExtractionResult = {
-  summary: string;
-  vitals: { name: string; value: string; unit: string; status: "normal" | "warning" | "critical" }[];
-  medications: { name: string; dose: string; frequency: string }[];
-  procedures: string[];
-  allergies: string[];
+// Mirrors the Mode 1 JSON in backend/skills/mednova-clinical-summaries/SKILL.md
+type Extraction = {
+  vitals: { type: string; value: string | null; unit: string | null; recorded_at: string | null; source: string }[];
+  medications: { name: string; dose: string | null; route: string | null; frequency: string | null; status: string | null; source: string }[];
+  allergies: { substance: string; reaction: string | null; source: string }[];
+  procedures: { name: string; date: string | null; source: string }[];
+  results: { test: string; value: string | null; unit: string | null; date: string | null; source: string }[];
+  uncertain: { field: string; reason: string }[];
 };
 
-type HandoverResult = {
-  shift_summary: string;
-  active_cases: number;
-  critical_patients: string[];
-  pending_tasks: string[];
-  notes: string;
-};
-
-const sampleRecord = `Patient: Nomsa Dlamini, 54F
-Admitted: 2025-05-28 for hypertensive crisis
+const sampleRecord = `Patient ref: PAT-001, 54F
+Admitted: 2026-10-24 for hypertensive crisis
 BP on admission: 190/120 mmHg, HR: 98 bpm, Temp: 37.1°C, SpO2: 96%
 Current BP: 142/88 mmHg, HR: 72 bpm, SpO2: 98%
 Medications: Amlodipine 10mg OD, Enalapril 20mg BD, Aspirin 75mg OD
 Allergies: Penicillin (rash), Sulfonamides
 Procedures: ECG (normal sinus rhythm), Echocardiogram (mild LVH), Renal function panel
 Clinical notes: Patient responding well to antihypertensives. Renal function stable.
-Discharge planned for 2025-06-02.`;
+Pending: repeat U&E in the morning.
+Discharge planned for 2026-10-30.`;
+
+const show = (...parts: (string | null)[]) => parts.filter(Boolean).join(" ");
+
+const ExtractionView = ({ data }: { data: Extraction }) => (
+  <div className="space-y-4">
+    <div className="rounded border border-primary/10 p-4">
+      <p className="text-xs font-semibold text-primary mb-3">Vitals</p>
+      {data.vitals.length === 0 && <p className="text-sm text-muted-foreground">None recorded</p>}
+      <div className="space-y-2">
+        {data.vitals.map((v, i) => (
+          <div key={i} className="flex justify-between items-center gap-2">
+            <span className="text-sm">{v.type}</span>
+            <span className="text-xs text-muted-foreground">{v.recorded_at}</span>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary">{show(v.value, v.unit) || "—"}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    <div className="rounded border border-primary/10 p-4">
+      <p className="text-xs font-semibold text-primary mb-3">Medications</p>
+      {data.medications.length === 0 && <p className="text-sm text-muted-foreground">None recorded</p>}
+      <div className="space-y-1">
+        {data.medications.map((m, i) => (
+          <div key={i} className="text-sm flex justify-between gap-2">
+            <span>{show(m.name, m.dose, m.route)}</span>
+            <span className="text-muted-foreground text-xs">{show(m.frequency, m.status)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    {/* Allergies are always shown, even when none are recorded */}
+    <div className="rounded border border-red-100 bg-red-50 p-4">
+      <p className="text-xs font-semibold text-red-600 mb-2">Allergies</p>
+      <div className="flex flex-wrap gap-2">
+        {data.allergies.length === 0 && <span className="text-sm text-red-700">None recorded</span>}
+        {data.allergies.map((a, i) => (
+          <span key={i} className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">
+            {a.substance}{a.reaction ? ` (${a.reaction})` : ""}
+          </span>
+        ))}
+      </div>
+    </div>
+
+    {(data.procedures.length > 0 || data.results.length > 0) && (
+      <div className="rounded border border-primary/10 p-4">
+        <p className="text-xs font-semibold text-primary mb-2">Procedures &amp; Results</p>
+        <ul className="space-y-1">
+          {data.procedures.map((p, i) => (
+            <li key={`p${i}`} className="text-sm text-muted-foreground">• {show(p.name, p.date)}</li>
+          ))}
+          {data.results.map((r, i) => (
+            <li key={`r${i}`} className="text-sm text-muted-foreground">• {r.test}: {show(r.value, r.unit) || "—"} {r.date ?? ""}</li>
+          ))}
+        </ul>
+      </div>
+    )}
+
+    {data.uncertain.length > 0 && (
+      <div className="rounded border border-yellow-100 bg-yellow-50 p-4">
+        <p className="text-xs font-semibold text-yellow-700 mb-2">Needs Review</p>
+        <ul className="space-y-1">
+          {data.uncertain.map((u, i) => (
+            <li key={i} className="text-sm text-yellow-800">• {u.field}: {u.reason}</li>
+          ))}
+        </ul>
+      </div>
+    )}
+  </div>
+);
+
+const renderExtraction = (draft: Draft) =>
+  draft.structured ? (
+    <ExtractionView data={draft.structured as Extraction} />
+  ) : (
+    <pre className="whitespace-pre-wrap text-sm font-sans">{draft.content}</pre>
+  );
 
 export const DataExtraction = () => {
   const [patientRecord, setPatientRecord] = useState(sampleRecord);
-  const [extractionResult, setExtractionResult] = useState<ExtractionResult | null>(null);
-  const [handoverResult, setHandoverResult] = useState<HandoverResult | null>(null);
-  const [extractLoading, setExtractLoading] = useState(false);
-  const [handoverLoading, setHandoverLoading] = useState(false);
+  const [summaryMode, setSummaryMode] = useState<"extraction" | "history">("extraction");
+  const [ward, setWard] = useState("Cardiology");
+  const [shift, setShift] = useState("Night Shift");
+  const extraction = useSkillDraft("doctor");
+  const handover = useSkillDraft("nurse");
 
   const features = [
     { icon: Database, title: "Patient History Summaries", desc: "Instantly summarise complex patient histories into structured, readable clinical snapshots." },
-    { icon: Activity, title: "Vitals Extraction", desc: "Extract and flag abnormal vital signs with trend analysis from unstructured notes." },
+    { icon: Activity, title: "Vitals Extraction", desc: "Extract vitals from unstructured notes, each linked back to its source." },
     { icon: Pill, title: "Medication & Procedure Extraction", desc: "Identify all medications, dosages, and procedures from clinical text automatically." },
-    { icon: Users, title: "Team Handovers", desc: "Auto-generate shift handover reports ensuring continuity of care between clinical teams." },
+    { icon: Users, title: "Team Handovers", desc: "Auto-generate SBAR shift handover reports ensuring continuity of care between clinical teams." },
   ];
 
-  const handleExtract = async () => {
+  const handleExtract = () => {
     if (!patientRecord.trim()) return;
-    setExtractLoading(true);
-    try {
-      const response = await fetch(`${API_BASE}/api/data-extraction/extract`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clinical_text: patientRecord }),
-      });
-      const data = await response.json();
-      setExtractionResult(data);
-    } catch {
-      setExtractionResult({
-        summary: "54-year-old female admitted for hypertensive crisis on 2025-05-28. BP improved from 190/120 to 142/88 mmHg on antihypertensive therapy. ECG shows normal sinus rhythm. Mild LVH on echo. Stable renal function. Planned discharge 2025-06-02.",
-        vitals: [
-          { name: "Blood Pressure", value: "142/88", unit: "mmHg", status: "warning" },
-          { name: "Heart Rate", value: "72", unit: "bpm", status: "normal" },
-          { name: "Temperature", value: "37.1", unit: "°C", status: "normal" },
-          { name: "SpO2", value: "98", unit: "%", status: "normal" },
-        ],
-        medications: [
-          { name: "Amlodipine", dose: "10mg", frequency: "Once daily" },
-          { name: "Enalapril", dose: "20mg", frequency: "Twice daily" },
-          { name: "Aspirin", dose: "75mg", frequency: "Once daily" },
-        ],
-        procedures: ["ECG (normal sinus rhythm)", "Echocardiogram (mild LVH)", "Renal function panel"],
-        allergies: ["Penicillin (rash)", "Sulfonamides"],
-      });
-    }
-    setExtractLoading(false);
+    extraction.run(`/api/ai/summaries/${summaryMode}`, { records: patientRecord });
   };
 
-  const handleHandover = async () => {
-    setHandoverLoading(true);
-    try {
-      const response = await fetch(`${API_BASE}/api/data-extraction/handover`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ward: "Cardiology", shift: "Night" }),
-      });
-      const data = await response.json();
-      setHandoverResult(data);
-    } catch {
-      setHandoverResult({
-        shift_summary: "Cardiology Night Shift — 07 June 2025. Ward stable with 12 patients. Two patients require close monitoring overnight due to haemodynamic instability. All medications administered as prescribed. No critical incidents this shift.",
-        active_cases: 12,
-        critical_patients: ["Nomsa Dlamini (Bed 4A) — BP monitoring q1h", "James Sithole (Bed 7B) — post-PCI observation"],
-        pending_tasks: ["Repeat troponin at 02:00 for Bed 7B", "Morning round bloods for all patients", "Echo report pending for Bed 2C"],
-        notes: "Dr. Singh on call overnight. Cardiologist Dr. Patel available for emergencies.",
-      });
-    }
-    setHandoverLoading(false);
-  };
-
-  const vitalStatus = (status: ExtractionResult["vitals"][0]["status"]) => {
-    const map = { normal: "text-green-600 bg-green-50", warning: "text-yellow-700 bg-yellow-50", critical: "text-red-600 bg-red-50" };
-    return map[status];
+  const handleHandover = () => {
+    if (!patientRecord.trim()) return;
+    handover.run("/api/ai/summaries/handover", {
+      records: patientRecord,
+      instructions: `${ward} ward, ${shift} handover.`,
+    });
   };
 
   return (
@@ -152,74 +181,33 @@ export const DataExtraction = () => {
                   className="w-full mt-1 px-3 py-2 rounded border border-gray-200 bg-background text-sm font-mono"
                 />
               </div>
-              <Button onClick={handleExtract} disabled={extractLoading} className="w-full">
-                {extractLoading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Extracting...</> : "Extract & Summarise"}
+              <div className="flex gap-2">
+                {[
+                  { value: "extraction" as const, label: "Structured extraction" },
+                  { value: "history" as const, label: "History summary" },
+                ].map((m) => (
+                  <button
+                    key={m.value}
+                    onClick={() => setSummaryMode(m.value)}
+                    className={`flex-1 px-3 py-2 rounded border text-sm font-medium transition-colors ${
+                      summaryMode === m.value ? "border-primary bg-primary/10 text-primary" : "border-gray-200 hover:bg-muted"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              <Button onClick={handleExtract} disabled={extraction.loading} className="w-full">
+                {extraction.loading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processing...</> : "Extract & Summarise"}
               </Button>
             </div>
 
-            <div>
-              {extractionResult ? (
-                <div className="space-y-4">
-                  {/* Summary */}
-                  <div className="rounded border border-primary/10 bg-background p-4">
-                    <p className="text-xs font-semibold text-primary mb-2">Clinical Summary</p>
-                    <p className="text-sm">{extractionResult.summary}</p>
-                  </div>
-
-                  {/* Vitals */}
-                  <div className="rounded border border-primary/10 bg-background p-4">
-                    <p className="text-xs font-semibold text-primary mb-3">Extracted Vitals</p>
-                    <div className="space-y-2">
-                      {extractionResult.vitals.map((v) => (
-                        <div key={v.name} className="flex justify-between items-center">
-                          <span className="text-sm">{v.name}</span>
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded ${vitalStatus(v.status)}`}>
-                            {v.value} {v.unit}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Medications */}
-                  <div className="rounded border border-primary/10 bg-background p-4">
-                    <p className="text-xs font-semibold text-primary mb-3">Medications</p>
-                    <div className="space-y-1">
-                      {extractionResult.medications.map((m) => (
-                        <div key={m.name} className="text-sm flex justify-between">
-                          <span>{m.name} {m.dose}</span>
-                          <span className="text-muted-foreground text-xs">{m.frequency}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Allergies */}
-                  <div className="rounded border border-red-100 bg-red-50 p-4">
-                    <p className="text-xs font-semibold text-red-600 mb-2">Allergies</p>
-                    <div className="flex flex-wrap gap-2">
-                      {extractionResult.allergies.map((a) => (
-                        <span key={a} className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">{a}</span>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Procedures */}
-                  <div className="rounded border border-primary/10 bg-background p-4">
-                    <p className="text-xs font-semibold text-primary mb-2">Procedures</p>
-                    <ul className="space-y-1">
-                      {extractionResult.procedures.map((p) => (
-                        <li key={p} className="text-sm text-muted-foreground">• {p}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              ) : (
-                <div className="h-full rounded border border-primary/10 bg-background flex items-center justify-center min-h-64">
-                  <p className="text-sm text-muted-foreground">Extraction results will appear here...</p>
-                </div>
-              )}
-            </div>
+            <DraftPanel
+              state={extraction}
+              placeholder="Extraction results will appear here..."
+              renderBody={renderExtraction}
+              downloadName="clinical-extraction"
+            />
           </div>
         </motion.div>
 
@@ -228,68 +216,31 @@ export const DataExtraction = () => {
           <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
             <div>
               <h2 className="text-2xl font-bold">Team Handover Report</h2>
-              <p className="text-sm text-muted-foreground mt-1">Generate shift handover for clinical team continuity</p>
+              <p className="text-sm text-muted-foreground mt-1">SBAR handover from the clinical notes above</p>
             </div>
             <div className="flex gap-3">
-              <select className="px-3 py-2 rounded border border-gray-200 bg-background text-sm">
+              <select value={ward} onChange={(e) => setWard(e.target.value)} className="px-3 py-2 rounded border border-gray-200 bg-background text-sm">
                 <option>Cardiology</option>
                 <option>General Medicine</option>
                 <option>ICU</option>
                 <option>Orthopaedics</option>
               </select>
-              <select className="px-3 py-2 rounded border border-gray-200 bg-background text-sm">
+              <select value={shift} onChange={(e) => setShift(e.target.value)} className="px-3 py-2 rounded border border-gray-200 bg-background text-sm">
                 <option>Night Shift</option>
                 <option>Day Shift</option>
                 <option>Evening Shift</option>
               </select>
-              <Button onClick={handleHandover} disabled={handoverLoading}>
-                {handoverLoading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating...</> : "Generate Handover"}
+              <Button onClick={handleHandover} disabled={handover.loading}>
+                {handover.loading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating...</> : "Generate Handover"}
               </Button>
             </div>
           </div>
 
-          {handoverResult ? (
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div className="rounded border border-primary/10 bg-background p-4">
-                  <p className="text-xs font-semibold text-primary mb-2">Shift Summary</p>
-                  <p className="text-sm">{handoverResult.shift_summary}</p>
-                </div>
-                <div className="rounded border border-primary/10 bg-background p-4">
-                  <p className="text-xs font-semibold text-primary mb-2">Active Cases</p>
-                  <p className="text-3xl font-extrabold text-primary">{handoverResult.active_cases}</p>
-                  <p className="text-xs text-muted-foreground">patients on ward</p>
-                </div>
-                <div className="rounded border border-primary/10 bg-background p-4">
-                  <p className="text-xs font-semibold text-muted-foreground mb-2">Handover Notes</p>
-                  <p className="text-sm">{handoverResult.notes}</p>
-                </div>
-              </div>
-              <div className="space-y-4">
-                <div className="rounded border border-red-100 bg-red-50 p-4">
-                  <p className="text-xs font-semibold text-red-600 mb-3">Critical Patients</p>
-                  <ul className="space-y-2">
-                    {handoverResult.critical_patients.map((p) => (
-                      <li key={p} className="text-sm text-red-700">⚠ {p}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="rounded border border-yellow-100 bg-yellow-50 p-4">
-                  <p className="text-xs font-semibold text-yellow-700 mb-3">Pending Tasks</p>
-                  <ul className="space-y-2">
-                    {handoverResult.pending_tasks.map((t) => (
-                      <li key={t} className="text-sm text-yellow-800">• {t}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="rounded border border-primary/10 bg-background p-8 text-center">
-              <FileText className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">Select a ward and shift, then click Generate Handover</p>
-            </div>
-          )}
+          <DraftPanel
+            state={handover}
+            placeholder="Select a ward and shift, then click Generate Handover"
+            downloadName="handover"
+          />
         </motion.div>
       </div>
     </div>
