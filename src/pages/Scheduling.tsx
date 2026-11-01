@@ -1,48 +1,29 @@
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { CalendarDays, Bell, AlertTriangle, CheckCircle2, Clock, User } from "lucide-react";
+import { CalendarDays, Bell, AlertTriangle, CheckCircle2, Clock, User, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { API_BASE } from "@/utils/api";
+import { DraftPanel } from "@/components/DraftPanel";
+import { useSkillDraft, type ReviewOutcome } from "@/utils/skills";
+import { describeAppointments, sampleAllocation, sampleAppointments, type Appointment } from "@/utils/samples";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
   visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.1, duration: 0.5 } }),
 };
 
-type Appointment = {
-  id: string;
-  patient: string;
-  doctor: string;
-  date: string;
-  time: string;
-  type: string;
-  noShowRisk: "low" | "medium" | "high";
-  reminderSent: boolean;
-};
-
-const mockAppointments: Appointment[] = [
-  { id: "APT-001", patient: "Thabo Nkosi", doctor: "Dr. Patel", date: "2025-06-10", time: "09:00", type: "General Consultation", noShowRisk: "low", reminderSent: true },
-  { id: "APT-002", patient: "Sarah van der Merwe", doctor: "Dr. Dlamini", date: "2025-06-10", time: "09:30", type: "Follow-up", noShowRisk: "high", reminderSent: false },
-  { id: "APT-003", patient: "Ayanda Mbeki", doctor: "Dr. Patel", date: "2025-06-10", time: "10:00", type: "New Patient", noShowRisk: "medium", reminderSent: true },
-  { id: "APT-004", patient: "Lerato Molefe", doctor: "Dr. Singh", date: "2025-06-11", time: "11:00", type: "Specialist", noShowRisk: "low", reminderSent: false },
-];
-
-const riskBadge = (risk: Appointment["noShowRisk"]) => {
-  const map = {
-    low: "bg-green-100 text-green-700",
-    medium: "bg-yellow-100 text-yellow-700",
-    high: "bg-red-100 text-red-700",
-  };
-  return map[risk];
-};
-
 export const Scheduling = () => {
-  const [appointments, setAppointments] = useState<Appointment[]>(mockAppointments);
+  const [appointments, setAppointments] = useState<Appointment[]>(sampleAppointments);
   const [bookingResult, setBookingResult] = useState<string | null>(null);
-  const [remindersSent, setRemindersSent] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [bookLoading, setBookLoading] = useState(false);
+  const [channel, setChannel] = useState<"SMS" | "WhatsApp" | "email">("SMS");
+  const [language, setLanguage] = useState("English");
+  const [assistantTask, setAssistantTask] = useState<"no_show_risk" | "reminders">("no_show_risk");
+  const assistant = useSkillDraft("admin");
+
+  const allocation = useSkillDraft("admin");
+  const [allocationInput, setAllocationInput] = useState(sampleAllocation);
 
   const [form, setForm] = useState({
     patient: "",
@@ -53,10 +34,10 @@ export const Scheduling = () => {
   });
 
   const features = [
-    { icon: CalendarDays, title: "Smart Appointment Allocation", desc: "AI optimises slot allocation based on doctor availability, patient history, and predicted consultation time." },
-    { icon: AlertTriangle, title: "Predictive No-Show Alerts", desc: "Identifies high-risk no-shows using patient history so staff can take action in advance." },
-    { icon: Bell, title: "Automated Reminders", desc: "SMS and email reminders sent automatically to patients 24h and 2h before appointments." },
-    { icon: CheckCircle2, title: "Patient Communication", desc: "Two-way messaging for confirmations, rescheduling, and pre-appointment instructions." },
+    { icon: CalendarDays, title: "Smart Appointment Allocation", desc: "AI proposes slot allocation by urgency, wait time and clinician availability, keeping an urgent buffer." },
+    { icon: AlertTriangle, title: "Predictive No-Show Alerts", desc: "Flags likely no-shows from attendance history so staff can reach out in advance." },
+    { icon: Bell, title: "Reminder Drafting", desc: "Channel-appropriate reminders in English, Afrikaans, isiXhosa or isiZulu — logistics only, no clinical details." },
+    { icon: CheckCircle2, title: "Staff Approval", desc: "Schedules and messages are proposals until staff sign them off." },
   ];
 
   const handleBook = async () => {
@@ -74,43 +55,40 @@ export const Scheduling = () => {
       const data = await response.json();
       const newApt: Appointment = {
         id: data.appointment_id || `APT-00${appointments.length + 1}`,
-        patient: form.patient,
-        doctor: form.doctor,
-        date: form.date,
-        time: form.time,
-        type: form.type,
-        noShowRisk: data.no_show_risk || "low",
-        reminderSent: false,
+        ...form,
+        previousNoShows: 0,
+        bookedDaysAhead: Math.max(0, Math.round((new Date(form.date).getTime() - Date.now()) / 86_400_000)),
+        reminderConfirmed: false,
+        reminderApproved: false,
       };
       setAppointments((prev) => [newApt, ...prev]);
       setBookingResult(`Appointment booked successfully! ID: ${newApt.id}`);
       setForm({ patient: "", doctor: "Dr. Patel", date: "", time: "", type: "General Consultation" });
     } catch {
-      const newApt: Appointment = {
-        id: `APT-00${appointments.length + 1}`,
-        patient: form.patient,
-        doctor: form.doctor,
-        date: form.date,
-        time: form.time,
-        type: form.type,
-        noShowRisk: "low",
-        reminderSent: false,
-      };
-      setAppointments((prev) => [newApt, ...prev]);
-      setBookingResult(`Appointment booked! ID: ${newApt.id}`);
-      setForm({ patient: "", doctor: "Dr. Patel", date: "", time: "", type: "General Consultation" });
+      setBookingResult("Could not reach the MedNova API - appointment not booked.");
     }
     setBookLoading(false);
   };
 
-  const handleSendReminders = async () => {
-    setLoading(true);
-    try {
-      await fetch(`${API_BASE}/api/scheduling/reminders/send-bulk`, { method: "POST" });
-    } catch {}
-    setAppointments((prev) => prev.map((a) => ({ ...a, reminderSent: true })));
-    setRemindersSent(true);
-    setLoading(false);
+  const runAssistant = (task: "no_show_risk" | "reminders") => {
+    setAssistantTask(task);
+    assistant.run("/api/ai/schedule/propose", {
+      task,
+      details: `Practice: Sunrise Family Clinic.\n${describeAppointments(appointments)}`,
+      channel: task === "reminders" ? channel : undefined,
+      language,
+    });
+  };
+
+  const handleAssistantReviewed = (outcome: ReviewOutcome) => {
+    if (assistantTask === "reminders" && outcome !== "Rejected") {
+      setAppointments((prev) => prev.map((a) => ({ ...a, reminderApproved: true })));
+    }
+  };
+
+  const handleAllocate = () => {
+    if (!allocationInput.trim()) return;
+    allocation.run("/api/ai/schedule/propose", { task: "allocation", details: allocationInput });
   };
 
   return (
@@ -209,46 +187,59 @@ export const Scheduling = () => {
                 {bookLoading ? "Booking..." : "Book Appointment"}
               </Button>
               {bookingResult && (
-                <p className={`text-sm mt-2 ${bookingResult.includes("Please") ? "text-red-500" : "text-green-600"}`}>
+                <p className={`text-sm mt-2 ${bookingResult.includes("successfully") ? "text-green-600" : "text-red-500"}`}>
                   {bookingResult}
                 </p>
               )}
             </div>
 
-            {/* No-show risk legend */}
-            <div>
-              <h3 className="font-semibold mb-4">No-Show Risk Guide</h3>
-              <div className="space-y-3">
-                {[
-                  { risk: "low", label: "Low Risk", desc: "Patient has strong attendance history. Reminder optional." },
-                  { risk: "medium", label: "Medium Risk", desc: "Some missed appointments. Reminder recommended." },
-                  { risk: "high", label: "High Risk", desc: "High likelihood of no-show. Follow up by phone." },
-                ].map((r) => (
-                  <div key={r.risk} className="flex items-start gap-3 p-3 rounded border border-primary/10 bg-background">
-                    <span className={`px-2 py-0.5 rounded text-xs font-semibold capitalize ${riskBadge(r.risk as Appointment["noShowRisk"])}`}>{r.label}</span>
-                    <p className="text-sm text-muted-foreground">{r.desc}</p>
-                  </div>
-                ))}
+            {/* Smart allocation */}
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-semibold">Smart Allocation — rosters, slots &amp; requests</label>
+                <textarea
+                  value={allocationInput}
+                  onChange={(e) => setAllocationInput(e.target.value)}
+                  rows={8}
+                  className="w-full mt-1 px-3 py-2 rounded border border-gray-200 bg-background text-sm font-mono"
+                />
               </div>
-              <div className="mt-4 p-3 rounded border border-primary/10 bg-background">
-                <p className="text-xs text-muted-foreground">
-                  AI analyses patient history, appointment type, and behavioural patterns to calculate no-show risk scores in real time.
-                </p>
-              </div>
+              <Button onClick={handleAllocate} disabled={allocation.loading} variant="outline" className="w-full">
+                {allocation.loading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Proposing...</> : "Propose Schedule"}
+              </Button>
             </div>
+          </div>
+          <div className="mt-6">
+            <DraftPanel state={allocation} placeholder="Proposed schedule will appear here..." downloadName="proposed-schedule" />
           </div>
         </motion.div>
 
         {/* Appointments list */}
         <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={6} className="mb-8">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
             <h2 className="text-2xl font-bold">Upcoming Appointments</h2>
-            <Button onClick={handleSendReminders} disabled={loading} variant="outline" size="sm">
-              <Bell className="h-4 w-4 mr-2" />
-              {loading ? "Sending..." : remindersSent ? "Reminders Sent ✓" : "Send All Reminders"}
-            </Button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button onClick={() => runAssistant("no_show_risk")} disabled={assistant.loading} variant="outline" size="sm">
+                <AlertTriangle className="h-4 w-4 mr-2" /> Assess No-Show Risk
+              </Button>
+              <select value={channel} onChange={(e) => setChannel(e.target.value as typeof channel)} className="px-2 py-1 rounded border border-gray-200 bg-background text-sm">
+                <option>SMS</option>
+                <option>WhatsApp</option>
+                <option>email</option>
+              </select>
+              <select value={language} onChange={(e) => setLanguage(e.target.value)} className="px-2 py-1 rounded border border-gray-200 bg-background text-sm">
+                <option>English</option>
+                <option>Afrikaans</option>
+                <option>isiXhosa</option>
+                <option>isiZulu</option>
+              </select>
+              <Button onClick={() => runAssistant("reminders")} disabled={assistant.loading} variant="outline" size="sm">
+                {assistant.loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Bell className="h-4 w-4 mr-2" />}
+                Draft Reminders
+              </Button>
+            </div>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-3 mb-6">
             {appointments.map((apt) => (
               <Card key={apt.id} className="border-primary/10">
                 <CardContent className="p-4">
@@ -258,7 +249,7 @@ export const Scheduling = () => {
                         <User className="h-5 w-5 text-primary" />
                       </div>
                       <div>
-                        <p className="font-semibold text-sm">{apt.patient}</p>
+                        <p className="font-semibold text-sm">{apt.patient} <span className="text-xs text-muted-foreground font-normal">· {apt.id}</span></p>
                         <p className="text-xs text-muted-foreground">{apt.doctor} · {apt.type}</p>
                       </div>
                     </div>
@@ -267,11 +258,9 @@ export const Scheduling = () => {
                         <Clock className="h-3 w-3" />
                         {apt.date} {apt.time}
                       </div>
-                      <span className={`px-2 py-0.5 rounded text-xs font-semibold capitalize ${riskBadge(apt.noShowRisk)}`}>
-                        {apt.noShowRisk} risk
-                      </span>
-                      <span className={`px-2 py-0.5 rounded text-xs font-semibold ${apt.reminderSent ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-500"}`}>
-                        {apt.reminderSent ? "Reminder Sent" : "No Reminder"}
+                      <span className="text-xs text-muted-foreground">{apt.previousNoShows} missed (12 mo)</span>
+                      <span className={`px-2 py-0.5 rounded text-xs font-semibold ${apt.reminderApproved ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-500"}`}>
+                        {apt.reminderApproved ? "Reminder Approved" : "No Reminder"}
                       </span>
                     </div>
                   </div>
@@ -279,16 +268,21 @@ export const Scheduling = () => {
               </Card>
             ))}
           </div>
+          <DraftPanel
+            state={assistant}
+            placeholder="Assess no-show risk or draft reminders — patient names are never sent to the AI."
+            onReviewed={handleAssistantReviewed}
+            downloadName={assistantTask === "reminders" ? "reminders" : "no-show-risk"}
+          />
         </motion.div>
 
         {/* Stats */}
         <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={7}>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {[
-              { label: "Total Today", value: appointments.length.toString() },
-              { label: "High Risk", value: appointments.filter((a) => a.noShowRisk === "high").length.toString() },
-              { label: "Reminders Sent", value: appointments.filter((a) => a.reminderSent).length.toString() },
-              { label: "Avg No-show Reduction", value: "34%" },
+              { label: "Total Upcoming", value: appointments.length.toString() },
+              { label: "With Prior No-shows", value: appointments.filter((a) => a.previousNoShows > 0).length.toString() },
+              { label: "Reminders Approved", value: appointments.filter((a) => a.reminderApproved).length.toString() },
             ].map((s) => (
               <Card key={s.label} className="border-primary/10">
                 <CardContent className="p-4 text-center">

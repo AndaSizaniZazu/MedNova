@@ -24,6 +24,7 @@ from modules.admin.routes import router as admin_router
 from modules.compliance.routes import router as compliance_router
 from modules.scheduling.routes import router as scheduling_router
 from modules.data_extraction.routes import router as data_extraction_router
+from modules.skills.routes import router as skills_router
 from config.security import setup_security
 
 # Configure logging
@@ -66,6 +67,7 @@ app.include_router(admin_router, prefix="/api/admin", tags=["Administrative Auto
 app.include_router(compliance_router, prefix="/api/compliance", tags=["Compliance & Security"])
 app.include_router(scheduling_router, prefix="/api/scheduling", tags=["Scheduling & Patient Flow"])
 app.include_router(data_extraction_router, prefix="/api/data-extraction", tags=["Data Extraction & Summaries"])
+app.include_router(skills_router, prefix="/api/ai", tags=["MedNova AI Skills"])
 
 @app.get("/")
 async def root():

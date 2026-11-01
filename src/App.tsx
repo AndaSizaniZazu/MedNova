@@ -7,6 +7,7 @@ import { ComplianceSecurity } from "./pages/ComplianceSecurity";
 import { Scheduling } from "./pages/Scheduling";
 import { DataExtraction } from "./pages/DataExtraction";
 import { Pricing } from "./pages/Pricing";
+import { AIWorkbench } from "./pages/AIWorkbench";
 import './App.css'
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
         <Route path="/scheduling" element={<Scheduling />} />
         <Route path="/data-extraction" element={<DataExtraction />} />
         <Route path="/pricing" element={<Pricing />} />
+        <Route path="/ai" element={<AIWorkbench />} />
       </Routes>
     </HashRouter>
   );
